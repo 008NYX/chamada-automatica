@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alunos - Escola Benedito Cláudio</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <span class="brand__crest">BC</span>
+      <div>
+        <strong class="brand__school">Escola Benedito Cláudio</strong>
+        <span class="brand__role">Alunos cadastrados</span>
+      </div>
+    </div>
+    <nav class="appbar__nav">
+      <a class="nav-link" href="/simple.html">Chamada</a>
+      <a class="nav-link" href="/panel">Painel do professor</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <p id="faces-count" class="muted"></p>
+    <div id="faces-grid" class="faces-grid"></div>
+
+    <div id="faces-empty" class="empty" hidden>
+      <h2>Nenhum aluno cadastrado ainda</h2>
+      <p>Entre como professor e use a tela de diagnóstico para cadastrar alunos.</p>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/faces.js"></script>
+</body>
+</html>

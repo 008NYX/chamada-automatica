@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel da sala - Escola Benedito Cláudio</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <span class="brand__crest">BC</span>
+      <div>
+        <strong class="brand__school">Escola Benedito Cláudio</strong>
+        <span class="brand__role">Painel do professor</span>
+      </div>
+    </div>
+    <nav class="appbar__nav">
+      <a class="nav-link" href="/simple.html">Chamada</a>
+      <a class="nav-link" href="/faces.html">Alunos</a>
+      <a class="nav-link nav-link--danger" href="/logout">Sair</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="toolbar">
+      <div class="toolbar__group">
+        <div>
+          <span class="toolbar__label">Sala</span>
+          <strong id="room-name" class="toolbar__date">--</strong>
+        </div>
+        <div>
+          <span class="toolbar__label">Data</span>
+          <input type="date" id="sheet-date" />
+        </div>
+      </div>
+      <div class="toolbar__actions">
+        <span id="session-badge" class="pill pill--idle">--</span>
+        <span id="session-countdown" class="toolbar__countdown"></span>
+
+        <div id="open-controls" class="timer-controls">
+          <label class="timer-label" title="Tempo maximo para o aluno se apresentar">
+            Tempo (min)
+            <input type="number" id="duration-min" min="0" max="1440" step="1" value="10" />
+          </label>
+          <div class="timer-presets">
+            <button type="button" class="btn btn--tiny" data-min="5">5</button>
+            <button type="button" class="btn btn--tiny" data-min="10">10</button>
+            <button type="button" class="btn btn--tiny" data-min="15">15</button>
+            <button type="button" class="btn btn--tiny" data-min="30">30</button>
+          </div>
+          <button id="btn-open" class="btn btn--primary">Abrir chamada</button>
+        </div>
+
+        <button id="btn-close" class="btn" hidden>Encerrar chamada</button>
+        <button id="btn-refresh" class="btn btn--ghost">Atualizar</button>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi">
+        <span class="kpi__label">Alunos da sala</span>
+        <strong id="kpi-total" class="kpi__value">0</strong>
+      </div>
+      <div class="kpi kpi--ok">
+        <span class="kpi__label">Presentes</span>
+        <strong id="kpi-present" class="kpi__value">0</strong>
+      </div>
+      <div class="kpi kpi--warn">
+        <span class="kpi__label">Aguardando</span>
+        <strong id="kpi-pending" class="kpi__value">0</strong>
+      </div>
+      <div class="kpi kpi--bad">
+        <span class="kpi__label">Faltas</span>
+        <strong id="kpi-absent" class="kpi__value">0</strong>
+      </div>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab tab--active" data-tab="sheet">Chamada</button>
+      <button class="tab" data-tab="report">Relatório de frequência</button>
+      <button class="tab" data-tab="students">Alunos</button>
+    </nav>
+
+    <section id="tab-sheet" class="panel">
+      <div class="panel__head">
+        <h2 id="sheet-title">Planilha de chamada</h2>
+        <div class="panel__actions">
+          <span id="sheet-hint" class="muted"></span>
+          <button id="export-sheet" class="btn btn--tiny" type="button">Exportar CSV</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th>Aluno</th>
+              <th>Status</th>
+              <th>Hora</th>
+              <th>Marcado por</th>
+              <th class="col-actions">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="sheet-body"></tbody>
+        </table>
+      </div>
+      <p id="sheet-empty" class="empty" hidden>Nenhum aluno nesta sala.</p>
+    </section>
+
+    <section id="tab-report" class="panel" hidden>
+      <div class="panel__head">
+        <h2 id="report-title">Relatório de frequência</h2>
+        <div class="panel__actions">
+          <span id="report-days" class="muted"></span>
+          <button id="export-report" class="btn btn--tiny" type="button">Exportar CSV</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="report">
+          <thead id="report-head"></thead>
+          <tbody id="report-body"></tbody>
+        </table>
+      </div>
+      <p id="report-empty" class="empty" hidden>Sem dados de chamada ainda.</p>
+    </section>
+
+    <section id="tab-students" class="panel" hidden>
+      <div class="panel__head">
+        <h2 id="students-title">Alunos da sala</h2>
+        <div class="panel__actions">
+          <input id="student-search" class="search-input" type="search" placeholder="Buscar aluno..." />
+          <a class="btn btn--primary" href="/">Cadastrar aluno</a>
+        </div>
+      </div>
+      <div id="students-grid" class="students-grid"></div>
+      <p id="students-empty" class="empty" hidden>Nenhum aluno nesta sala.</p>
+    </section>
+  </main>
+
+  <script src="/js/room.js"></script>
+</body>
+</html>

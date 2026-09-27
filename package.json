@@ -1,0 +1,18 @@
+{
+  "name": "reconhecimento-facial-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema web local de reconhecimento facial com deteccao de oculos (Node.js + Express + face-api.js)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@vladmandic/face-api": "^1.7.15",
+    "express": "^4.21.2"
+  }
+}

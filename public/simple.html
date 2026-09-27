@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamada - Escola Benedito Cláudio</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <span class="brand__crest">BC</span>
+      <div>
+        <strong class="brand__school">Escola Benedito Cláudio</strong>
+        <span class="brand__role">Chamada por reconhecimento facial</span>
+      </div>
+    </div>
+    <nav class="appbar__nav">
+      <a class="nav-link" href="/panel">Painel do professor</a>
+      <a class="nav-link" href="/faces.html">Alunos</a>
+    </nav>
+  </header>
+
+  <main class="simple-wrap">
+    <div class="toolbar simple-toolbar">
+      <div>
+        <span class="toolbar__label">Sala da chamada</span>
+        <select id="room-select" class="room-select"></select>
+      </div>
+      <div class="toolbar__actions">
+        <span id="session-badge" class="pill pill--warn">Carregando...</span>
+        <span id="session-countdown" class="toolbar__countdown"></span>
+      </div>
+    </div>
+
+    <div class="simple-video" id="simple-video">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="closed-overlay" class="closed-overlay" hidden>
+        <strong id="closed-text">Chamada fechada</strong>
+        <span>Aguarde o professor abrir a chamada desta sala.</span>
+      </div>
+    </div>
+
+    <div class="simple-status">
+      <span id="status-badge" class="simple-status__badge simple-status__badge--idle">
+        Selecione a sala
+      </span>
+      <p id="today-totals" class="muted"></p>
+      <p id="error-detail" class="error-detail" hidden></p>
+    </div>
+
+    <div id="user-panel" class="simple-user">
+      <img id="user-photo" alt="Foto do aluno" hidden />
+      <div>
+        <div class="big-name" id="user-name">--</div>
+        <div class="line" id="user-roll">--</div>
+        <div class="line" id="user-confidence"></div>
+        <div class="line line--presence" id="presence-line"></div>
+      </div>
+    </div>
+
+    <div class="present-panel">
+      <div class="present-panel__head">
+        <span>Presentes na sala</span>
+        <strong id="present-count">0/0</strong>
+      </div>
+      <ul id="present-list" class="present-list"></ul>
+    </div>
+
+    <div class="simple-status">
+      <button id="btn-start" class="btn btn--primary" hidden>Ativar camera</button>
+      <label class="switch switch--inline">
+        <input type="checkbox" id="ignore-glasses" />
+        <span>Ignorar oculos</span>
+      </label>
+    </div>
+  </main>
+
+  <script src="/face-api/face-api.js"></script>
+  <script src="/js/glassesNet.js"></script>
+  <script src="/js/glassesDetector.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/simple.js"></script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro e diagnóstico - Escola Benedito Cláudio</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="appbar">
+    <div class="brand">
+      <span class="brand__crest">BC</span>
+      <div>
+        <strong class="brand__school">Escola Benedito Cláudio</strong>
+        <span class="brand__role">Cadastro e diagnóstico</span>
+      </div>
+    </div>
+    <nav class="appbar__nav">
+      <a class="nav-link" href="/simple.html">Chamada</a>
+      <a class="nav-link" href="/panel">Painel do professor</a>
+      <a class="nav-link" href="/faces.html">Alunos</a>
+      <span id="model-status" class="dot dot--loading" title="status da IA"></span>
+      <span id="model-status-text" class="nav-status">Carregando IA...</span>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="camera-card">
+      <div class="video-wrap" id="video-wrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div id="banner" class="banner banner--hidden"></div>
+        <div id="video-placeholder" class="video-placeholder">
+          Camera desligada<br /><small>Clique em "Iniciar camera"</small>
+        </div>
+      </div>
+
+      <div class="camera-actions">
+        <button id="btn-start" class="btn btn--primary" disabled>Iniciar camera</button>
+        <button id="btn-register" class="btn btn--accent" hidden>Cadastrar aluno</button>
+        <label class="switch switch--inline" title="Marque se o aluno esta SEM oculos e o sistema esta bloqueando por engano.">
+          <input type="checkbox" id="override-glasses" />
+          <span>Estou sem oculos (ignorar aviso)</span>
+        </label>
+      </div>
+
+      <p id="camera-info" class="muted"></p>
+      <p class="hint">
+        Posicione o rosto no guia e clique em "Cadastrar aluno". Os dados faciais
+        sao capturados na hora — nao precisa ficar na frente da camera depois.
+      </p>
+    </section>
+
+    <aside class="side">
+      <div class="panel panel--diag">
+        <h2>
+          Diagnóstico
+          <button id="btn-diag-toggle" class="btn btn--tiny" type="button">ocultar</button>
+        </h2>
+        <p class="muted">Descubra por que o cadastro nao libera e ajuste a leitura.</p>
+
+        <div id="diag-body">
+          <div class="diag-controls">
+            <label class="range-label">Sensibilidade da deteccao (score): <output id="detect-threshold-value">0.45</output></label>
+            <input type="range" id="detect-threshold" min="0.10" max="0.90" step="0.05" value="0.45" />
+
+            <label class="range-label">Intervalo entre leituras: <output id="detect-rate-value">220</output> ms</label>
+            <input type="range" id="detect-rate" min="80" max="1000" step="20" value="220" />
+
+            <label class="field-inline">
+              Resolucao do detector
+              <select id="detect-inputsize">
+                <option value="160">160 (rapido)</option>
+                <option value="224">224</option>
+                <option value="320" selected>320 (equilibrado)</option>
+                <option value="416">416 (preciso)</option>
+                <option value="512">512 (maximo)</option>
+              </select>
+            </label>
+
+            <label class="switch"><input type="checkbox" id="show-guide" checked /><span>Mostrar guia de enquadramento</span></label>
+            <label class="switch"><input type="checkbox" id="mirror" /><span>Espelhar camera (modo selfie)</span></label>
+          </div>
+
+          <h3 class="diag-subtitle">Checklist do cadastro</h3>
+          <ul id="diag-checklist" class="diag-checklist"></ul>
+
+          <h3 class="diag-subtitle">Leituras ao vivo</h3>
+          <pre id="diag-dump" class="debug-pre">sem dados</pre>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Status</h2>
+        <p id="status-text" class="status-text status-text--idle">Aguardando inicio da camera.</p>
+
+        <div id="user-card" class="user-card" hidden>
+          <div class="user-card__avatar" id="user-avatar">?</div>
+          <div class="user-card__info">
+            <strong id="user-name">--</strong>
+            <span id="user-roll">--</span>
+            <span id="user-present"></span>
+            <span id="user-confidence" class="user-confidence"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Alunos cadastrados</h2>
+        <p class="muted"><span id="user-count">0</span> aluno(s) no sistema.</p>
+        <ul id="user-list" class="user-list"></ul>
+      </div>
+
+      <div class="panel panel--debug">
+        <h2>
+          Detector de oculos
+          <button id="btn-debug-toggle" class="btn btn--tiny" type="button">mostrar</button>
+        </h2>
+        <div id="debug-body" hidden>
+          <p class="muted" id="glasses-source">Fonte: heuristica</p>
+          <label class="switch">
+            <input type="checkbox" id="glasses-enabled" checked />
+            <span>Deteccao de oculos ativa</span>
+          </label>
+          <label class="range-label">
+            Sensibilidade (limiar):
+            <output id="glasses-threshold-value">1.00</output>
+          </label>
+          <input type="range" id="glasses-threshold" min="0.3" max="2.5" step="0.05" value="1" />
+          <pre id="glasses-debug" class="debug-pre">sem dados</pre>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal__backdrop" data-close-modal></div>
+    <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 id="modal-title">Cadastrar aluno</h2>
+
+      <div class="capture-summary">
+        <img id="capture-photo" class="capture-summary__photo" alt="rosto capturado" />
+        <div class="capture-summary__info">
+          <strong id="capture-status-text">Rosto capturado</strong>
+          <span id="sample-count">0 vetores</span>
+          <span class="muted">Os dados faciais ja foram gravados. Agora e so preencher e salvar.</span>
+        </div>
+      </div>
+
+      <div id="modal-error" class="alert alert--danger" hidden></div>
+
+      <form id="register-form" autocomplete="off">
+        <label>
+          Nome completo
+          <input type="text" id="field-name" name="name" maxlength="120" required />
+        </label>
+        <label>
+          Sala
+          <select id="field-classroom" required></select>
+        </label>
+        <label>
+          Número da chamada
+          <input type="number" id="field-roll" name="rollNumber" min="1" max="9999" required />
+        </label>
+
+        <div class="modal__actions">
+          <button type="button" class="btn" data-close-modal>Cancelar</button>
+          <button type="submit" id="btn-save" class="btn btn--primary">Salvar aluno</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/face-api/face-api.js"></script>
+  <script src="/js/glassesNet.js"></script>
+  <script src="/js/glassesDetector.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

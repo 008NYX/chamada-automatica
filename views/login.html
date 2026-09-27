@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acesso do professor - Escola Benedito Cláudio</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <div class="brand">
+      <span class="brand__crest">BC</span>
+      <div>
+        <strong class="brand__school">Escola Benedito Cláudio</strong>
+        <span class="brand__role">Painel do professor</span>
+      </div>
+    </div>
+
+    <h1>Acesso restrito</h1>
+    <p class="muted">Entre com a senha do professor para gerenciar alunos e chamadas.</p>
+
+    <div id="error" class="alert alert--danger" hidden></div>
+
+    <form id="login-form" autocomplete="off">
+      <label>
+        Senha do professor
+        <input type="password" id="password" required autofocus />
+      </label>
+      <button type="submit" id="btn-login" class="btn btn--primary btn--block">Entrar</button>
+    </form>
+
+    <a class="login-back" href="/simple.html">&larr; Voltar ao reconhecimento</a>
+  </main>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const input = document.getElementById('password');
+    const error = document.getElementById('error');
+    const btn = document.getElementById('btn-login');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      error.hidden = true;
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: input.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Falha no login');
+        window.location.href = '/panel';
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    });
+  </script>
+</body>
+</html>

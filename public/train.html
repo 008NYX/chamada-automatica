@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Treinar detector de oculos - Reconhecimento Facial</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Treinar detector de <span>oculos</span></h1>
+    <div class="topbar-status">
+      <span id="model-status" class="dot dot--loading"></span>
+      <span id="model-status-text">Carregando modelos de IA...</span>
+      <a class="btn btn--tiny" href="/">&larr; Voltar ao reconhecimento</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="camera-card">
+      <div class="video-wrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div id="banner" class="banner banner--hidden"></div>
+      </div>
+
+      <div class="camera-actions">
+        <button id="btn-start" class="btn btn--primary" disabled>Iniciar camera</button>
+      </div>
+
+      <p class="hint">
+        Deixe o rosto bem enquadrado e iluminado. Grave alguns segundos COM os
+        oculos, troque em seguida para SEM os oculos e mova levemente a cabeca
+        entre as gravacoes para dar variedade ao modelo.
+      </p>
+    </section>
+
+    <aside class="side">
+
+      <div class="panel">
+        <h2>1. Coletar amostras</h2>
+        <p class="muted">
+          Cada gravacao captura varios frames enquanto o rosto aparece na camera.
+        </p>
+
+        <div class="record-grid">
+          <button id="rec-with" class="btn record-btn record-btn--with" disabled>
+            Gravar <strong>COM</strong> oculos
+          </button>
+          <button id="rec-without" class="btn record-btn record-btn--without" disabled>
+            Gravar <strong>SEM</strong> oculos
+          </button>
+        </div>
+
+        <div class="counters">
+          <div class="counter">
+            <span class="counter__dot counter__dot--with"></span>
+            <span>COM oculos</span>
+            <strong id="count-with">0</strong>
+          </div>
+          <div class="counter">
+            <span class="counter__dot counter__dot--without"></span>
+            <span>SEM oculos</span>
+            <strong id="count-without">0</strong>
+          </div>
+        </div>
+
+        <button id="btn-clear" class="btn btn--tiny" disabled>Limpar amostras</button>
+        <p id="face-hint" class="muted"></p>
+      </div>
+
+      <div class="panel">
+        <h2>2. Treinar a rede</h2>
+
+        <div class="train-params">
+          <label>
+            Neuronios ocultos
+            <input type="number" id="hidden-size" min="2" max="32" value="8" />
+          </label>
+          <label>
+            Epocas
+            <input type="number" id="epochs" min="50" max="5000" step="50" value="400" />
+          </label>
+        </div>
+
+        <label class="switch">
+          <input type="checkbox" id="warm-start" checked />
+          <span>Continuar a partir do modelo salvo</span>
+        </label>
+
+        <button id="btn-train" class="btn btn--primary" disabled>Treinar rede</button>
+
+        <div class="metrics">
+          <div class="metric">
+            <span>Acuracia treino</span>
+            <strong id="metric-train-acc">--</strong>
+          </div>
+          <div class="metric">
+            <span>Acuracia validacao</span>
+            <strong id="metric-val-acc">--</strong>
+          </div>
+          <div class="metric">
+            <span>Erro (loss)</span>
+            <strong id="metric-loss">--</strong>
+          </div>
+        </div>
+
+        <div class="progress progress--goal">
+          <div id="acc-progress" class="progress__bar" style="width:0%"></div>
+          <span id="acc-progress-label" class="progress__label">0%</span>
+        </div>
+        <p id="acc-message" class="muted"></p>
+      </div>
+
+      <div class="panel">
+        <h2>3. Teste ao vivo</h2>
+        <p class="live-label" id="live-label">--</p>
+        <div class="progress">
+          <div id="live-bar" class="progress__bar" style="width:0%"></div>
+        </div>
+        <p class="muted">Probabilidade de estar COM oculos: <strong id="live-prob">--</strong></p>
+        <pre id="glasses-debug" class="debug-pre">sem dados</pre>
+      </div>
+
+      <div class="panel">
+        <h2>4. Salvar modelo</h2>
+        <p class="muted" id="model-info">Nenhum modelo treinado nesta sessao.</p>
+        <div class="modal__actions modal__actions--left">
+          <button id="btn-save" class="btn btn--accent" disabled>Salvar modelo</button>
+          <button id="btn-delete" class="btn btn--tiny" disabled>Apagar modelo salvo</button>
+        </div>
+        <p id="save-status" class="muted"></p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/face-api/face-api.js"></script>
+  <script src="/js/glassesNet.js"></script>
+  <script src="/js/glassesDetector.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/train.js"></script>
+</body>
+</html>

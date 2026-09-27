@@ -723,7 +723,7 @@ app.post('/api/attendance/session/close', requireTeacher, async (req, res) => {
   let sheet;
   try {
     sheet = await updateDb((data) => {
-      const session = ensureSession(data, classroom, date, true);
+      const session = ensureSession(data, classroom, date, false);
       session.open = false;
       session.closedAt = new Date().toISOString();
       return buildSheet(data, date, classroom);
@@ -745,7 +745,7 @@ app.put('/api/attendance/record', requireTeacher, async (req, res) => {
       if (!student) throw new HttpError(404, 'Aluno nao encontrado');
       if (!student.classroom) throw new HttpError(400, 'Aluno sem sala definida');
 
-      const session = ensureSession(data, student.classroom, date, true);
+      const session = ensureSession(data, student.classroom, date, false);
       if (body.present) {
         session.records[student.id] = { present: true, at: new Date().toISOString(), by: 'manual' };
       } else {

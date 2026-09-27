@@ -84,7 +84,19 @@ async function connectMongo() {
 
 async function readFresh() {
   await connectMongo();
-  const doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
+
+  let doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
+
+  // Documentos antigos (migrados do JSON) nao tinham o campo de versao.
+  // Inicializa "rev" uma unica vez para o controle de concorrencia funcionar.
+  if (doc && typeof doc.rev !== 'number') {
+    await mongoColl.updateOne(
+      { _id: MONGO_DOC_ID, rev: { $exists: false } },
+      { $set: { rev: 0 } }
+    );
+    doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
+  }
+
   const data = normalizeDb(doc && doc.data ? doc.data : null);
   const rev = doc && Number.isInteger(doc.rev) ? doc.rev : 0;
   cache = data;

@@ -82,13 +82,19 @@ async function connectMongo() {
   await connectPromise;
 }
 
+async function readFresh() {
+  await connectMongo();
+  const doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
+  const data = normalizeDb(doc && doc.data ? doc.data : null);
+  const rev = doc && Number.isInteger(doc.rev) ? doc.rev : 0;
+  cache = data;
+  return { data, rev, exists: !!doc };
+}
+
 async function readDb() {
   if (MODE === 'mongo') {
-    await connectMongo();
-    const doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
-    cache = normalizeDb(doc && doc.data ? doc.data : null);
-    if (!doc) await writeDb();
-    return cache;
+    const { data } = await readFresh();
+    return data;
   }
 
   if (cache) return cache;
@@ -121,6 +127,45 @@ async function readDb() {
     }
   }
   return cache;
+}
+
+async function updateDb(mutator) {
+  if (MODE !== 'mongo') {
+    const data = await readDb();
+    const result = mutator(data);
+    if (data.meta) data.meta.updatedAt = new Date().toISOString();
+    await writeDb();
+    return result;
+  }
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const { data, rev, exists } = await readFresh();
+    const result = mutator(data);
+    if (!data.meta || typeof data.meta !== 'object') data.meta = {};
+    data.meta.updatedAt = new Date().toISOString();
+    const now = data.meta.updatedAt;
+
+    try {
+      if (exists) {
+        const res = await mongoColl.replaceOne(
+          { _id: MONGO_DOC_ID, rev },
+          { _id: MONGO_DOC_ID, rev: rev + 1, data, updatedAt: now }
+        );
+        if (res.matchedCount === 1) return result;
+      } else {
+        const res = await mongoColl.updateOne(
+          { _id: MONGO_DOC_ID },
+          { $setOnInsert: { rev: 0, data, updatedAt: now } },
+          { upsert: true }
+        );
+        if (res.upsertedCount === 1) return result;
+      }
+    } catch (err) {
+      if (!err || err.code !== 11000) throw err;
+    }
+  }
+
+  throw new Error('Nao foi possivel salvar por concorrencia. Tente novamente.');
 }
 
 function writeDb() {
@@ -169,4 +214,4 @@ const ready =
 
 ready.catch(() => {});
 
-module.exports = { readDb, writeDb, ready, mode: MODE };
+module.exports = { readDb, writeDb, updateDb, ready, mode: MODE };

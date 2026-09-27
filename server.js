@@ -5,7 +5,29 @@ require('./env');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { readDb, writeDb, ready: storageReady, mode: STORAGE_MODE } = require('./db');
+const {
+  readDb,
+  updateDb,
+  ready: storageReady,
+  mode: STORAGE_MODE,
+} = require('./db');
+
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function sendError(res, err) {
+  if (err && err.status) {
+    const body = { error: err.message };
+    if (err.status === 409) body.closed = true;
+    return res.status(err.status).json(body);
+  }
+  console.error('[api]', err && err.stack ? err.stack : err);
+  return res.status(500).json({ error: 'Erro interno do servidor' });
+}
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
@@ -236,18 +258,6 @@ function ensureSession(db, classroom, date, open, durationMin) {
   return room[date];
 }
 
-function resolveSession(session, nowMs) {
-  const now = nowMs || Date.now();
-  if (!session) return false;
-  if (session.open && session.expiresAt && now >= Date.parse(session.expiresAt)) {
-    session.open = false;
-    session.closedAt = session.expiresAt;
-    session.autoClosed = true;
-    return true;
-  }
-  return false;
-}
-
 function sessionActive(session, nowMs) {
   const now = nowMs || Date.now();
   return !!(session && session.open && (!session.expiresAt || now < Date.parse(session.expiresAt)));
@@ -257,10 +267,6 @@ function sessionRemainingMs(session, nowMs) {
   if (!session || !session.open || !session.expiresAt) return null;
   const now = nowMs || Date.now();
   return Math.max(0, Date.parse(session.expiresAt) - now);
-}
-
-function isSessionOpen(db, classroom, date) {
-  return sessionActive(getSession(db, classroom, date));
 }
 
 function roomStudents(db, classroom) {
@@ -300,7 +306,7 @@ function buildSheet(db, date, classroom) {
       ? {
           open: active,
           openedAt: session.openedAt,
-          closedAt: session.closedAt,
+          closedAt: session.closedAt || (!active && session.expiresAt ? session.expiresAt : null),
           durationMin: session.durationMin || null,
           expiresAt: session.expiresAt || null,
           remainingMs: sessionRemainingMs(session, now),
@@ -475,13 +481,6 @@ app.post('/api/users', requireTeacher, async (req, res) => {
   const photo = sanitizePhoto(body.photo);
   if (photo === undefined) return res.status(400).json({ error: 'Foto invalida' });
 
-  const db = await readDb();
-  if (db.users.some((u) => u.classroom === classroom && u.rollNumber === rollNumber)) {
-    return res
-      .status(409)
-      .json({ error: `O numero ${rollNumber} ja esta em uso na sala ${classroom}` });
-  }
-
   const now = new Date().toISOString();
   const user = {
     id: crypto.randomUUID(),
@@ -493,109 +492,140 @@ app.post('/api/users', requireTeacher, async (req, res) => {
     createdAt: now,
     updatedAt: now,
   };
-  db.users.push(user);
-  db.meta.updatedAt = now;
-  await writeDb();
+
+  try {
+    await updateDb((data) => {
+      if (data.users.some((u) => u.classroom === classroom && u.rollNumber === rollNumber)) {
+        throw new HttpError(409, `O numero ${rollNumber} ja esta em uso na sala ${classroom}`);
+      }
+      data.users.push(user);
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
   res.status(201).json({ user: publicUser(user) });
 });
 
 app.put('/api/users/:id', requireTeacher, async (req, res) => {
-  const db = await readDb();
-  const user = db.users.find((u) => u.id === req.params.id);
-  if (!user) return res.status(404).json({ error: 'Aluno nao encontrado' });
-
   const body = req.body || {};
+  const updates = {};
+
   if (body.name !== undefined) {
     const name = sanitizeString(body.name, 120);
     if (!name) return res.status(400).json({ error: 'Nome invalido' });
-    user.name = name;
+    updates.name = name;
   }
   if (body.classroom !== undefined) {
     const classroom = sanitizeString(body.classroom, 4);
     if (!classroom || !CLASSROOM_SET.has(classroom)) {
       return res.status(400).json({ error: 'Sala invalida' });
     }
-    user.classroom = classroom;
+    updates.classroom = classroom;
   }
   if (body.rollNumber !== undefined) {
     const rollNumber = Number(body.rollNumber);
     if (!Number.isInteger(rollNumber) || rollNumber < 1 || rollNumber > 9999) {
       return res.status(400).json({ error: 'Numero da chamada invalido' });
     }
-    if (
-      db.users.some(
-        (u) => u.id !== user.id && u.classroom === user.classroom && u.rollNumber === rollNumber
-      )
-    ) {
-      return res
-        .status(409)
-        .json({ error: `O numero ${rollNumber} ja esta em uso na sala ${user.classroom}` });
-    }
-    user.rollNumber = rollNumber;
+    updates.rollNumber = rollNumber;
   }
   if (body.descriptor !== undefined || body.descriptors !== undefined) {
     const desc = normalizeDescriptors(body);
     if (desc.error) return res.status(400).json({ error: desc.error });
-    user.descriptors = desc.descriptors;
+    updates.descriptors = desc.descriptors;
   }
   if (body.photo !== undefined) {
     const photo = sanitizePhoto(body.photo);
     if (photo === undefined) return res.status(400).json({ error: 'Foto invalida' });
-    user.photo = photo;
+    updates.photo = photo;
   }
 
-  user.updatedAt = new Date().toISOString();
-  db.meta.updatedAt = user.updatedAt;
-  await writeDb();
-  res.json({ user: publicUser(user) });
+  let updated;
+  try {
+    updated = await updateDb((data) => {
+      const user = data.users.find((u) => u.id === req.params.id);
+      if (!user) throw new HttpError(404, 'Aluno nao encontrado');
+
+      const nextClassroom = updates.classroom !== undefined ? updates.classroom : user.classroom;
+      if (
+        updates.rollNumber !== undefined &&
+        data.users.some(
+          (u) =>
+            u.id !== user.id &&
+            u.classroom === nextClassroom &&
+            u.rollNumber === updates.rollNumber
+        )
+      ) {
+        throw new HttpError(
+          409,
+          `O numero ${updates.rollNumber} ja esta em uso na sala ${nextClassroom}`
+        );
+      }
+
+      Object.assign(user, updates);
+      user.updatedAt = new Date().toISOString();
+      return user;
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  res.json({ user: publicUser(updated) });
 });
 
 app.delete('/api/users/:id', requireTeacher, async (req, res) => {
-  const db = await readDb();
-  const idx = db.users.findIndex((u) => u.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Aluno nao encontrado' });
-  const [removed] = db.users.splice(idx, 1);
+  let removedId;
+  try {
+    removedId = await updateDb((data) => {
+      const idx = data.users.findIndex((u) => u.id === req.params.id);
+      if (idx === -1) throw new HttpError(404, 'Aluno nao encontrado');
+      const [removed] = data.users.splice(idx, 1);
 
-  for (const room of Object.values(db.attendance.sessions)) {
-    for (const session of Object.values(room)) {
-      if (session && session.records) delete session.records[removed.id];
-    }
+      for (const room of Object.values(data.attendance.sessions)) {
+        for (const session of Object.values(room)) {
+          if (session && session.records) delete session.records[removed.id];
+        }
+      }
+      return removed.id;
+    });
+  } catch (err) {
+    return sendError(res, err);
   }
-  db.meta.updatedAt = new Date().toISOString();
-  await writeDb();
-  res.json({ removed: removed.id });
+  res.json({ removed: removedId });
 });
 
 app.post('/api/attendance/mark', async (req, res) => {
   const studentId = req.body && req.body.studentId;
-  const db = await readDb();
-  const student = db.users.find((u) => u.id === studentId);
-  if (!student) return res.status(404).json({ error: 'Aluno nao encontrado' });
-  if (!student.classroom) {
-    return res.status(400).json({ error: 'Aluno sem sala definida. Procure o professor.' });
-  }
-
   const date = todayLocal();
-  const session = getSession(db, student.classroom, date);
-  if (resolveSession(session)) await writeDb();
-  if (!sessionActive(session)) {
-    return res
-      .status(409)
-      .json({ error: `Chamada encerrada para a sala ${student.classroom}.`, closed: true });
-  }
 
-  let newlyMarked = false;
-  if (!session.records[studentId]) {
-    session.records[studentId] = { present: true, at: new Date().toISOString(), by: 'face' };
-    db.meta.updatedAt = new Date().toISOString();
-    await writeDb();
-    newlyMarked = true;
+  let payload;
+  try {
+    payload = await updateDb((data) => {
+      const student = data.users.find((u) => u.id === studentId);
+      if (!student) throw new HttpError(404, 'Aluno nao encontrado');
+      if (!student.classroom) {
+        throw new HttpError(400, 'Aluno sem sala definida. Procure o professor.');
+      }
+
+      const session = getSession(data, student.classroom, date);
+      if (!sessionActive(session)) {
+        throw new HttpError(409, `Chamada encerrada para a sala ${student.classroom}.`);
+      }
+
+      let newlyMarked = false;
+      if (!session.records[studentId]) {
+        session.records[studentId] = { present: true, at: new Date().toISOString(), by: 'face' };
+        newlyMarked = true;
+      }
+      return {
+        newlyMarked,
+        student: publicUser(student),
+        sheet: buildSheet(data, date, student.classroom),
+      };
+    });
+  } catch (err) {
+    return sendError(res, err);
   }
-  res.json({
-    newlyMarked,
-    student: publicUser(student),
-    sheet: buildSheet(db, date, student.classroom),
-  });
+  res.json(payload);
 });
 
 app.get('/api/attendance/today', async (req, res) => {
@@ -604,19 +634,12 @@ app.get('/api/attendance/today', async (req, res) => {
   if (!classroom || !CLASSROOM_SET.has(classroom)) {
     return res.status(400).json({ error: 'Informe a sala' });
   }
-  if (resolveSession(getSession(db, classroom, todayLocal()))) await writeDb();
   res.json(buildSheet(db, todayLocal(), classroom));
 });
 
 app.get('/api/attendance/rooms', async (_req, res) => {
   const db = await readDb();
-  const date = todayLocal();
-  let changed = false;
-  for (const room of CLASSROOMS) {
-    if (resolveSession(getSession(db, room, date))) changed = true;
-  }
-  if (changed) await writeDb();
-  res.json({ date, rooms: buildRoomsStatus(db) });
+  res.json({ date: todayLocal(), rooms: buildRoomsStatus(db) });
 });
 
 app.get('/api/attendance/sessions', requireTeacher, async (req, res) => {
@@ -665,22 +688,28 @@ app.post('/api/attendance/session/open', requireTeacher, async (req, res) => {
   if (!classroom || !CLASSROOM_SET.has(classroom)) {
     return res.status(400).json({ error: 'Sala invalida' });
   }
-  const db = await readDb();
   const date = sanitizeString(body.date, 10) || todayLocal();
 
   let durationMin = Number(body.durationMin);
   if (!Number.isFinite(durationMin) || durationMin <= 0) durationMin = 0;
   if (durationMin > 24 * 60) durationMin = 24 * 60;
 
-  const session = ensureSession(db, classroom, date, true);
-  session.open = true;
-  session.closedAt = null;
-  session.autoClosed = false;
-  session.durationMin = durationMin > 0 ? Math.round(durationMin) : null;
-  session.expiresAt = durationMin > 0 ? new Date(Date.now() + durationMin * 60000).toISOString() : null;
-  db.meta.updatedAt = new Date().toISOString();
-  await writeDb();
-  res.json(buildSheet(db, date, classroom));
+  let sheet;
+  try {
+    sheet = await updateDb((data) => {
+      const session = ensureSession(data, classroom, date, true);
+      session.open = true;
+      session.closedAt = null;
+      session.autoClosed = false;
+      session.durationMin = durationMin > 0 ? Math.round(durationMin) : null;
+      session.expiresAt =
+        durationMin > 0 ? new Date(Date.now() + durationMin * 60000).toISOString() : null;
+      return buildSheet(data, date, classroom);
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  res.json(sheet);
 });
 
 app.post('/api/attendance/session/close', requireTeacher, async (req, res) => {
@@ -689,34 +718,45 @@ app.post('/api/attendance/session/close', requireTeacher, async (req, res) => {
   if (!classroom || !CLASSROOM_SET.has(classroom)) {
     return res.status(400).json({ error: 'Sala invalida' });
   }
-  const db = await readDb();
   const date = sanitizeString(body.date, 10) || todayLocal();
-  const session = ensureSession(db, classroom, date, true);
-  session.open = false;
-  session.closedAt = new Date().toISOString();
-  db.meta.updatedAt = new Date().toISOString();
-  await writeDb();
-  res.json(buildSheet(db, date, classroom));
+
+  let sheet;
+  try {
+    sheet = await updateDb((data) => {
+      const session = ensureSession(data, classroom, date, true);
+      session.open = false;
+      session.closedAt = new Date().toISOString();
+      return buildSheet(data, date, classroom);
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  res.json(sheet);
 });
 
 app.put('/api/attendance/record', requireTeacher, async (req, res) => {
   const body = req.body || {};
-  const db = await readDb();
-  const student = db.users.find((u) => u.id === body.studentId);
-  if (!student) return res.status(404).json({ error: 'Aluno nao encontrado' });
-  if (!student.classroom) return res.status(400).json({ error: 'Aluno sem sala definida' });
-
   const date = sanitizeString(body.date, 10) || todayLocal();
-  const session = ensureSession(db, student.classroom, date, true);
 
-  if (body.present) {
-    session.records[student.id] = { present: true, at: new Date().toISOString(), by: 'manual' };
-  } else {
-    delete session.records[student.id];
+  let sheet;
+  try {
+    sheet = await updateDb((data) => {
+      const student = data.users.find((u) => u.id === body.studentId);
+      if (!student) throw new HttpError(404, 'Aluno nao encontrado');
+      if (!student.classroom) throw new HttpError(400, 'Aluno sem sala definida');
+
+      const session = ensureSession(data, student.classroom, date, true);
+      if (body.present) {
+        session.records[student.id] = { present: true, at: new Date().toISOString(), by: 'manual' };
+      } else {
+        delete session.records[student.id];
+      }
+      return buildSheet(data, date, student.classroom);
+    });
+  } catch (err) {
+    return sendError(res, err);
   }
-  db.meta.updatedAt = new Date().toISOString();
-  await writeDb();
-  res.json(buildSheet(db, date, student.classroom));
+  res.json(sheet);
 });
 
 app.get('/api/glasses-model', async (_req, res) => {
@@ -729,19 +769,27 @@ app.put('/api/glasses-model', async (req, res) => {
   const error = validateGlassesModel(model);
   if (error) return res.status(400).json({ error });
 
-  const db = await readDb();
   const now = new Date().toISOString();
-  db.glassesModel = { ...model, savedAt: now };
-  db.meta.updatedAt = now;
-  await writeDb();
-  res.json({ model: db.glassesModel });
+  let saved;
+  try {
+    saved = await updateDb((data) => {
+      data.glassesModel = { ...model, savedAt: now };
+      return data.glassesModel;
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+  res.json({ model: saved });
 });
 
 app.delete('/api/glasses-model', async (_req, res) => {
-  const db = await readDb();
-  db.glassesModel = null;
-  db.meta.updatedAt = new Date().toISOString();
-  await writeDb();
+  try {
+    await updateDb((data) => {
+      data.glassesModel = null;
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
   res.json({ ok: true });
 });
 

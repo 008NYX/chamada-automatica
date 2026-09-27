@@ -3,7 +3,6 @@
 require('./env');
 
 const path = require('path');
-const fsp = require('fs/promises');
 const crypto = require('crypto');
 const express = require('express');
 const { readDb, writeDb, ready: storageReady, mode: STORAGE_MODE } = require('./db');
@@ -16,9 +15,6 @@ const SCHOOL_NAME = process.env.SCHOOL_NAME || 'Benedito Cláudio';
 const CLASSROOMS = ['8D'];
 const CLASSROOM_SET = new Set(CLASSROOMS);
 
-const IS_VERCEL = !!process.env.VERCEL;
-const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp' : ROOT);
-const AUTH_FILE = path.join(DATA_DIR, '.auth.json');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const VIEWS_DIR = path.join(ROOT, 'views');
 const FACEAPI_DIST = path.join(PUBLIC_DIR, 'face-api');
@@ -56,14 +52,6 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   console.error('[server] uncaughtException:', err && err.stack ? err.stack : err);
 });
-
-async function ensureDataDir() {
-  try {
-    await fsp.mkdir(DATA_DIR, { recursive: true });
-  } catch (_) {
-    /* ignora */
-  }
-}
 
 function sanitizeString(value, maxLen) {
   if (typeof value !== 'string') return null;
@@ -138,44 +126,28 @@ function byRoll(a, b) {
 
 let authConfig = null;
 
-async function loadAuth() {
-  try {
-    const parsed = JSON.parse(await fsp.readFile(AUTH_FILE, 'utf8'));
-    if (parsed.secret && parsed.hash && parsed.salt) {
-      authConfig = parsed;
-      return;
-    }
-  } catch (_) {
-
-  }
-
-  const password = process.env.TEACHER_PASSWORD || 'benedito';
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  authConfig = {
-    salt,
-    hash,
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
-    createdAt: new Date().toISOString(),
-  };
-
-  try {
-    await fsp.writeFile(AUTH_FILE, JSON.stringify(authConfig, null, 2));
-  } catch (err) {
-    console.error('[auth] nao foi possivel salvar .auth.json (fs somente leitura):', err.message);
-  }
-
-  if (process.env.TEACHER_PASSWORD) {
-    console.log('[auth] senha do professor definida via TEACHER_PASSWORD');
-  } else {
-    console.log(`[auth] Senha inicial do professor: "${password}" (troque definindo TEACHER_PASSWORD)`);
-  }
+function deriveHex(seed, size) {
+  return crypto.createHash('sha256').update(seed).digest('hex').slice(0, size);
 }
 
-const authReadyPromise = (async () => {
-  await ensureDataDir();
-  await loadAuth();
-})().catch((err) => console.error('[startup]', err && err.message ? err.message : err));
+async function loadAuth() {
+  const password = process.env.TEACHER_PASSWORD || 'benedito';
+  const secret = process.env.SESSION_SECRET || deriveHex('bc-session:' + password, 64);
+  const salt = deriveHex('bc-salt:' + password, 32);
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+
+  authConfig = { salt, hash, secret, createdAt: new Date().toISOString() };
+
+  console.log(
+    process.env.TEACHER_PASSWORD
+      ? '[auth] senha definida por TEACHER_PASSWORD'
+      : '[auth] usando senha padrao "benedito" (defina TEACHER_PASSWORD)'
+  );
+}
+
+const authReadyPromise = Promise.resolve()
+  .then(loadAuth)
+  .catch((err) => console.error('[startup]', err && err.message ? err.message : err));
 
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));

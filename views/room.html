@@ -39,14 +39,14 @@
         <span id="session-countdown" class="toolbar__countdown"></span>
 
         <div id="open-controls" class="timer-controls">
-          <label class="timer-label" title="Tempo maximo para o aluno se apresentar">
-            Tempo (min)
-            <input type="number" id="duration-min" min="0" max="1440" step="1" value="10" />
+          <label class="timer-label" title="0 = sem tempo limite (so fecha no botao Encerrar)">
+            Tempo limite (min)
+            <input type="number" id="duration-min" min="0" max="1440" step="1" value="0" />
           </label>
           <div class="timer-presets">
-            <button type="button" class="btn btn--tiny" data-min="5">5</button>
+            <button type="button" class="btn btn--tiny" data-min="0">sem limite</button>
             <button type="button" class="btn btn--tiny" data-min="10">10</button>
-            <button type="button" class="btn btn--tiny" data-min="15">15</button>
+            <button type="button" class="btn btn--tiny" data-min="20">20</button>
             <button type="button" class="btn btn--tiny" data-min="30">30</button>
           </div>
           <button id="btn-open" class="btn btn--primary">Abrir chamada</button>

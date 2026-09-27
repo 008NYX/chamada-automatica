@@ -259,8 +259,11 @@ function ensureSession(db, classroom, date, open, durationMin) {
 }
 
 function sessionActive(session, nowMs) {
-  const now = nowMs || Date.now();
-  return !!(session && session.open && (!session.expiresAt || now < Date.parse(session.expiresAt)));
+  if (!session || !session.open) return false;
+  if (!session.expiresAt) return true;
+  const exp = Date.parse(session.expiresAt);
+  if (!Number.isFinite(exp)) return true;
+  return (nowMs || Date.now()) < exp;
 }
 
 function sessionRemainingMs(session, nowMs) {

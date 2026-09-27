@@ -3,6 +3,7 @@
 require('./env');
 
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const {
@@ -39,8 +40,14 @@ const CLASSROOM_SET = new Set(CLASSROOMS);
 
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const VIEWS_DIR = path.join(ROOT, 'views');
-const FACEAPI_DIST = path.join(PUBLIC_DIR, 'face-api');
-const FACEAPI_MODELS = path.join(PUBLIC_DIR, 'models');
+const FACEAPI_DIST_DIRS = [
+  path.join(PUBLIC_DIR, 'face-api'),
+  path.join(ROOT, 'node_modules', '@vladmandic', 'face-api', 'dist'),
+];
+const FACEAPI_MODEL_DIRS = [
+  path.join(PUBLIC_DIR, 'models'),
+  path.join(ROOT, 'node_modules', '@vladmandic', 'face-api', 'model'),
+];
 
 const SESSION_COOKIE = 'bc_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
@@ -421,6 +428,14 @@ app.get('/api/config', async (_req, res) => {
   res.json({ school: SCHOOL_NAME, today: todayLocal(), now: new Date().toISOString(), classrooms: CLASSROOMS });
 });
 
+function modelsAvailable() {
+  const hasModels = FACEAPI_MODEL_DIRS.some((dir) =>
+    fs.existsSync(path.join(dir, 'face_recognition_model.bin'))
+  );
+  const hasLib = FACEAPI_DIST_DIRS.some((dir) => fs.existsSync(path.join(dir, 'face-api.js')));
+  return hasModels && hasLib;
+}
+
 app.get('/api/health', async (_req, res) => {
   const db = await readDb();
   res.json({
@@ -429,6 +444,7 @@ app.get('/api/health', async (_req, res) => {
     school: SCHOOL_NAME,
     students: db.users.length,
     today: todayLocal(),
+    models: modelsAvailable(),
   });
 });
 
@@ -841,8 +857,12 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
-app.use('/face-api', express.static(FACEAPI_DIST, { fallthrough: false }));
-app.use('/models', express.static(FACEAPI_MODELS, { fallthrough: false }));
+for (const dir of FACEAPI_DIST_DIRS) {
+  app.use('/face-api', express.static(dir, { fallthrough: true }));
+}
+for (const dir of FACEAPI_MODEL_DIRS) {
+  app.use('/models', express.static(dir, { fallthrough: true }));
+}
 app.use(express.static(PUBLIC_DIR));
 
 app.use((err, _req, res, _next) => {

@@ -1,9 +1,12 @@
 'use strict';
 
+require('./env');
+
 const path = require('path');
 const fsp = require('fs/promises');
 const crypto = require('crypto');
 const express = require('express');
+const { readDb, writeDb, ready: storageReady, mode: STORAGE_MODE } = require('./db');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
@@ -13,8 +16,9 @@ const SCHOOL_NAME = process.env.SCHOOL_NAME || 'Benedito Cláudio';
 const CLASSROOMS = ['8D'];
 const CLASSROOM_SET = new Set(CLASSROOMS);
 
-const DB_FILE = path.join(ROOT, 'database.json');
-const AUTH_FILE = path.join(ROOT, '.auth.json');
+const IS_VERCEL = !!process.env.VERCEL;
+const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp' : ROOT);
+const AUTH_FILE = path.join(DATA_DIR, '.auth.json');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const VIEWS_DIR = path.join(ROOT, 'views');
 const FACEAPI_DIST = path.join(ROOT, 'node_modules', '@vladmandic', 'face-api', 'dist');
@@ -33,6 +37,15 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 
+app.use('/api', async (_req, res, next) => {
+  try {
+    await storageReady;
+    next();
+  } catch (err) {
+    res.status(503).json({ error: 'Banco de dados indisponivel: ' + (err.message || err) });
+  }
+});
+
 process.on('unhandledRejection', (reason) => {
   console.error('[server] unhandledRejection:', reason && reason.stack ? reason.stack : reason);
 });
@@ -40,88 +53,12 @@ process.on('uncaughtException', (err) => {
   console.error('[server] uncaughtException:', err && err.stack ? err.stack : err);
 });
 
-let dbCache = null;
-let writeChain = Promise.resolve();
-
-function emptyDb() {
-  const now = new Date().toISOString();
-  return {
-    meta: { version: 2, engine: 'json', school: SCHOOL_NAME, createdAt: now, updatedAt: now },
-    users: [],
-    attendance: { sessions: {} },
-    glassesModel: null,
-  };
-}
-
-function normalizeDb(data) {
-  if (!data || typeof data !== 'object') return emptyDb();
-  if (!Array.isArray(data.users)) data.users = [];
-  if (!data.meta || typeof data.meta !== 'object') data.meta = { version: 2, engine: 'json' };
-  if (!data.attendance || typeof data.attendance !== 'object') data.attendance = { sessions: {} };
-  if (!data.attendance.sessions || typeof data.attendance.sessions !== 'object') {
-    data.attendance.sessions = {};
-  }
-
-  const sessions = data.attendance.sessions;
-  const isFlat = Object.keys(sessions).some(
-    (k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && sessions[k] && sessions[k].date
-  );
-  if (isFlat) {
-    const nested = {};
-    for (const [key, value] of Object.entries(sessions)) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && value && value.date) {
-        const room = value.classroom || 'Sem sala';
-        if (!nested[room]) nested[room] = {};
-        nested[room][key] = value;
-      } else {
-        nested[key] = value;
-      }
-    }
-    data.attendance.sessions = nested;
-  }
-  if (!('glassesModel' in data)) data.glassesModel = null;
-  return data;
-}
-
-async function readDb() {
-  if (dbCache) return dbCache;
+async function ensureDataDir() {
   try {
-    const raw = await fsp.readFile(DB_FILE, 'utf8');
-    dbCache = normalizeDb(JSON.parse(raw));
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      dbCache = emptyDb();
-      await writeDb();
-    } else {
-      console.error('[db] database.json invalido, criando backup e recomecando:', err.message);
-      try {
-        await fsp.rename(DB_FILE, `${DB_FILE}.corrupt-${Date.now()}`);
-      } catch (_) {
-
-      }
-      dbCache = emptyDb();
-      await writeDb();
-    }
+    await fsp.mkdir(DATA_DIR, { recursive: true });
+  } catch (_) {
+    /* ignora */
   }
-  return dbCache;
-}
-
-function writeDb() {
-  const snapshot = JSON.stringify(dbCache, null, 2);
-  writeChain = writeChain
-    .then(async () => {
-
-      try {
-        await fsp.copyFile(DB_FILE, path.join(ROOT, 'database.backup.json'));
-      } catch (_) {
-
-      }
-      const tmp = `${DB_FILE}.tmp`;
-      await fsp.writeFile(tmp, snapshot, 'utf8');
-      await fsp.rename(tmp, DB_FILE);
-    })
-    .catch((err) => console.error('[db] falha ao salvar:', err.message));
-  return writeChain;
 }
 
 function sanitizeString(value, maxLen) {
@@ -199,24 +136,42 @@ let authConfig = null;
 
 async function loadAuth() {
   try {
-    authConfig = JSON.parse(await fsp.readFile(AUTH_FILE, 'utf8'));
-    if (!authConfig.secret || !authConfig.hash || !authConfig.salt) throw new Error('incompleto');
-  } catch (_) {
-    const password = process.env.TEACHER_PASSWORD || 'benedito';
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-    authConfig = {
-      salt,
-      hash,
-      secret: crypto.randomBytes(32).toString('hex'),
-      createdAt: new Date().toISOString(),
-    };
-    await fsp.writeFile(AUTH_FILE, JSON.stringify(authConfig, null, 2));
-    if (!process.env.TEACHER_PASSWORD) {
-      console.log(`[auth] Senha inicial do professor: "${password}" (troque definindo TEACHER_PASSWORD)`);
+    const parsed = JSON.parse(await fsp.readFile(AUTH_FILE, 'utf8'));
+    if (parsed.secret && parsed.hash && parsed.salt) {
+      authConfig = parsed;
+      return;
     }
+  } catch (_) {
+
+  }
+
+  const password = process.env.TEACHER_PASSWORD || 'benedito';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  authConfig = {
+    salt,
+    hash,
+    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await fsp.writeFile(AUTH_FILE, JSON.stringify(authConfig, null, 2));
+  } catch (err) {
+    console.error('[auth] nao foi possivel salvar .auth.json (fs somente leitura):', err.message);
+  }
+
+  if (process.env.TEACHER_PASSWORD) {
+    console.log('[auth] senha do professor definida via TEACHER_PASSWORD');
+  } else {
+    console.log(`[auth] Senha inicial do professor: "${password}" (troque definindo TEACHER_PASSWORD)`);
   }
 }
+
+const authReadyPromise = (async () => {
+  await ensureDataDir();
+  await loadAuth();
+})().catch((err) => console.error('[startup]', err && err.message ? err.message : err));
 
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));
@@ -483,7 +438,13 @@ app.get('/api/config', async (_req, res) => {
 
 app.get('/api/health', async (_req, res) => {
   const db = await readDb();
-  res.json({ ok: true, engine: 'json', school: SCHOOL_NAME, students: db.users.length, today: todayLocal() });
+  res.json({
+    ok: true,
+    engine: STORAGE_MODE,
+    school: SCHOOL_NAME,
+    students: db.users.length,
+    today: todayLocal(),
+  });
 });
 
 app.get('/api/auth/me', (req, res) => {
@@ -491,6 +452,7 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  await authReadyPromise;
   const password = (req.body && req.body.password) || '';
   if (!verifyPassword(password)) {
     await new Promise((r) => setTimeout(r, 350));
@@ -861,12 +823,16 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
-Promise.all([readDb(), loadAuth()]).then(() => {
-  app.listen(PORT, () => {
-    console.log('');
-    console.log(`  ${SCHOOL_NAME} - Sistema de chamada por reconhecimento facial`);
-    console.log(`  -> http://localhost:${PORT}`);
-    console.log(`  Painel do professor: http://localhost:${PORT}/panel`);
-    console.log('');
+module.exports = app;
+
+if (require.main === module) {
+  authReadyPromise.then(() => {
+    app.listen(PORT, () => {
+      console.log('');
+      console.log(`  ${SCHOOL_NAME} - Sistema de chamada por reconhecimento facial`);
+      console.log(`  -> http://localhost:${PORT}`);
+      console.log(`  Painel do professor: http://localhost:${PORT}/panel`);
+      console.log('');
+    });
   });
-});
+}

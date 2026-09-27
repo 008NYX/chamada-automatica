@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/index.js": {
+      "includeFiles": [
+        "views/**",
+        "public/**",
+        "node_modules/@vladmandic/face-api/model/**",
+        "node_modules/@vladmandic/face-api/dist/**"
+      ]
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+}

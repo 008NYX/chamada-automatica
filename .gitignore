@@ -1,0 +1,8 @@
+node_modules/
+.env
+.auth.json
+database.json
+database.backup.json
+database.json.corrupt-*
+.vercel
+*.log

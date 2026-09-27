@@ -1,4 +1,6 @@
 node_modules/
+public/face-api/
+public/models/
 .env
 .auth.json
 database.json

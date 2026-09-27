@@ -21,8 +21,8 @@ const DATA_DIR = process.env.DATA_DIR || (IS_VERCEL ? '/tmp' : ROOT);
 const AUTH_FILE = path.join(DATA_DIR, '.auth.json');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const VIEWS_DIR = path.join(ROOT, 'views');
-const FACEAPI_DIST = path.join(ROOT, 'node_modules', '@vladmandic', 'face-api', 'dist');
-const FACEAPI_MODELS = path.join(ROOT, 'node_modules', '@vladmandic', 'face-api', 'model');
+const FACEAPI_DIST = path.join(PUBLIC_DIR, 'face-api');
+const FACEAPI_MODELS = path.join(PUBLIC_DIR, 'models');
 
 const SESSION_COOKIE = 'bc_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
@@ -44,6 +44,10 @@ app.use('/api', async (_req, res, next) => {
   } catch (err) {
     res.status(503).json({ error: 'Banco de dados indisponivel: ' + (err.message || err) });
   }
+});
+
+app.get('/ping', (_req, res) => {
+  res.type('text/plain').send('pong');
 });
 
 process.on('unhandledRejection', (reason) => {

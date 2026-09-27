@@ -1,14 +1,11 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "includeFiles": [
-        "views/**",
-        "public/**",
-        "node_modules/@vladmandic/face-api/model/**",
-        "node_modules/@vladmandic/face-api/dist/**"
-      ]
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": "{views,public}/**" }
     }
-  },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "server.js" }]
 }

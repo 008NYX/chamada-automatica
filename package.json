@@ -7,10 +7,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "migrate": "node scripts/migrate-to-mongo.js"
+    "migrate": "node scripts/migrate-to-mongo.js",
+    "postinstall": "node scripts/copy-models.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",

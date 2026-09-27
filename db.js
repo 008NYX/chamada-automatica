@@ -167,4 +167,6 @@ const ready =
         }
       })();
 
+ready.catch(() => {});
+
 module.exports = { readDb, writeDb, ready, mode: MODE };

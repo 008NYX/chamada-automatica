@@ -451,6 +451,14 @@ app.get('/api/health', async (_req, res) => {
     today: todayLocal(),
     models: modelsAvailable(),
     mongoEnv: !!process.env.MONGODB_URI,
+    runtime: process.env.VERCEL ? 'vercel' : 'local',
+    envVars: {
+      MONGODB_URI: !!process.env.MONGODB_URI,
+      MONGODB_DB: !!process.env.MONGODB_DB,
+      MONGODB_COLLECTION: !!process.env.MONGODB_COLLECTION,
+      TEACHER_PASSWORD: !!process.env.TEACHER_PASSWORD,
+      SESSION_SECRET: !!process.env.SESSION_SECRET,
+    },
   };
   try {
     const db = await readDb();

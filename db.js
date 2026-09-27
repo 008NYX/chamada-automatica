@@ -83,8 +83,6 @@ async function connectMongo() {
 }
 
 async function readDb() {
-  if (cache) return cache;
-
   if (MODE === 'mongo') {
     await connectMongo();
     const doc = await mongoColl.findOne({ _id: MONGO_DOC_ID });
@@ -92,6 +90,8 @@ async function readDb() {
     if (!doc) await writeDb();
     return cache;
   }
+
+  if (cache) return cache;
 
   try {
     const raw = await fsp.readFile(DB_FILE, 'utf8');

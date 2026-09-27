@@ -65,6 +65,17 @@
     sheet: null,
   };
 
+  function warnStorage() {
+    const div = document.createElement('div');
+    div.style.cssText =
+      'position:fixed;top:0;left:0;right:0;z-index:9999;background:#dc2626;color:#fff;' +
+      'padding:9px 12px;font:600 13px system-ui,sans-serif;text-align:center';
+    div.textContent =
+      'ATENCAO: MongoDB nao configurado neste servidor. Defina MONGODB_URI nas variaveis ' +
+      'de ambiente (o banco local e temporario e some sozinho).';
+    document.body.appendChild(div);
+  }
+
   async function loadModels() {
     try {
       if (window.faceapi.tf) {
@@ -101,6 +112,7 @@
   async function init() {
     try {
       const cfg = await Api.config();
+      if (cfg.storage !== 'mongo') warnStorage();
       el.roomSelect.innerHTML = '';
       for (const room of cfg.classrooms) {
         const opt = document.createElement('option');

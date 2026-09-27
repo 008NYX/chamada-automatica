@@ -62,7 +62,9 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 
-app.use('/api', async (_req, res, next) => {
+app.use('/api', async (req, res, next) => {
+  const path = req.originalUrl.split('?')[0];
+  if (path === '/api/health' || path === '/api/config') return next();
   try {
     await storageReady;
     next();
@@ -425,7 +427,13 @@ function buildReport(db, classroom) {
 }
 
 app.get('/api/config', async (_req, res) => {
-  res.json({ school: SCHOOL_NAME, today: todayLocal(), now: new Date().toISOString(), classrooms: CLASSROOMS });
+  res.json({
+    school: SCHOOL_NAME,
+    today: todayLocal(),
+    now: new Date().toISOString(),
+    classrooms: CLASSROOMS,
+    storage: STORAGE_MODE,
+  });
 });
 
 function modelsAvailable() {
@@ -437,15 +445,19 @@ function modelsAvailable() {
 }
 
 app.get('/api/health', async (_req, res) => {
-  const db = await readDb();
-  res.json({
-    ok: true,
+  const base = {
     engine: STORAGE_MODE,
     school: SCHOOL_NAME,
-    students: db.users.length,
     today: todayLocal(),
     models: modelsAvailable(),
-  });
+    mongoEnv: !!process.env.MONGODB_URI,
+  };
+  try {
+    const db = await readDb();
+    res.json({ ok: true, students: db.users.length, ...base });
+  } catch (err) {
+    res.json({ ok: false, error: err.message || String(err), ...base });
+  }
 });
 
 app.get('/api/auth/me', (req, res) => {
